@@ -12,14 +12,14 @@ class ImageList():
         item_num = 1
 
         while item_num > 0:
-            url = env.url
-            req = requests.get(url, cookies=env.cookie)
+            url = env.url(page_num)
+            req = requests.get(url, cookies=env.cookie())
             bsObj = BeautifulSoup(req.text, "html.parser")
 
             item_num = 0
             for image_containers in bsObj.find_all(class_="post-preview-container"):
                 for link in image_containers.find_all("a"):
-                    url = env.base_url + link.get("href")
+                    url = env.base_url() + link.get("href")
                     self.srcs.append(ImageLink(url))
                     item_num = item_num + 1
             print(f"get page{page_num} items:{item_num}")
@@ -66,7 +66,7 @@ class ImageLink():
         return self.get_url()
         
     def get_url(self):
-        req = requests.get(self.target_url, cookies=env.cookie)
+        req = requests.get(self.target_url, cookies=env.cookie())
         bsObjLink = BeautifulSoup(req.text, "html.parser")
         image_link = bsObjLink.find(id="lowres")
         if image_link is None:
