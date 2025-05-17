@@ -28,7 +28,7 @@ class ImageList():
 
         random.shuffle(self.srcs)
 
-    async def next(self):
+    def next(self):
         self.index = self.index + 1
         if self.index >= len(self.srcs):
             self.index = 0
