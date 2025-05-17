@@ -2,6 +2,7 @@ import flet as ft
 import requests
 from bs4 import BeautifulSoup
 import env
+import random
 
 class ImageList():
     def __init__(self):
@@ -25,7 +26,9 @@ class ImageList():
             print(f"get page{page_num} items:{item_num}")
             page_num = page_num+1
 
-    def next(self):
+        random.shuffle(self.srcs)
+
+    async def next(self):
         self.index = self.index + 1
         if self.index >= len(self.srcs):
             self.index = 0
@@ -117,7 +120,7 @@ def main(page: ft.Page):
         image_view.update()
 
     page.on_keyboard_event = on_keyboard
-    image_view = ft.Image(src=images.next(), fit=ft.ImageFit.FIT_HEIGHT, width=1920, height=1080)
+    image_view = ft.Image(src=images.next(), fit=ft.ImageFit.CONTAIN)
     prev_button = ft.IconButton(icon=ft.Icons.SKIP_PREVIOUS, on_click=on_click_prev)
     next_button = ft.IconButton(icon=ft.Icons.SKIP_NEXT, on_click=on_click_next)
 
