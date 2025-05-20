@@ -4,55 +4,142 @@ from bs4 import BeautifulSoup
 import env
 import random
 
-class ImageList():
+import sqlite3
+import datetime
+import base64
+import os
+
+DATABASE_NAME = "image.db"
+
+
+def requests_get(url):
+    requests_header={'user-agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'}
+    req = requests.get(url, headers=requests_header, cookies=env.cookie())    
+    return req
+
+class Database():
     def __init__(self):
-        self.srcs=[]
-        self.index = -1
+        self.conn = sqlite3.connect(DATABASE_NAME)
+        self.cur  = self.conn.cursor()
 
-        page_num = 1
-        item_num = 1
+    def execute(self, sql):
+        return self.cur.execute(sql)
 
+    def __del__(self):
+        self.conn.commit()
+        self.conn.close()
+
+class ImageDB():
+    def __init__(self):
+        if not os.path.isfile(DATABASE_NAME):
+            self.init()
+            self.update_all()
+
+    def init(self):
+        db = Database()
+        db.execute(
+            "CREATE TABLE images(id INTEGER PRIMARY KEY AUTOINCREMENT, url STRING, base64 STRING, favorite INTEGER, updated DATE)"
+        )
+
+    def update_all(self):
+        image_urls = []
+        # scraping web page
+        page_num=1
+        item_num=1
         while item_num > 0:
             url = env.url(page_num)
-            req = requests.get(url, cookies=env.cookie())
+            req = requests_get(url)
             bsObj = BeautifulSoup(req.text, "html.parser")
 
             item_num = 0
-            for image_containers in bsObj.find_all(class_="post-preview-container"):
+            fav_main_grid = bsObj.find_all(class_="post-gallery post-gallery-grid post-gallery-150")
+            for image_containers in fav_main_grid:
                 for link in image_containers.find_all("a"):
                     url = env.base_url() + link.get("href")
-                    self.srcs.append(ImageLink(url))
+                    image_urls.append(url)
                     item_num = item_num + 1
             print(f"get page{page_num} items:{item_num}")
             page_num = page_num+1
+        # update db
+        db = Database()
+        for url in image_urls:
+            db.execute("")
+            res = db.execute(f'SELECT id FROM images WHERE url="{url}"')
+            if res.fetchone() is None:
+                favorite = 0
+                date = datetime.datetime.now()
+                # get image
+                image_base64 = self.get_image(url)
+                if image_base64 is None:
+                    print(f"  Image:{url} can not get.")
+                    continue
+                # insert DB
+                db.execute(f'INSERT INTO images(url, base64, favorite, updated) values("{url}", "{image_base64}", {favorite}, "{date}")')
+                #update_base64(img, db)
+                print(f'CREATE {url}')
+            else:
+                print(f"EXIST {url}")
 
-        random.shuffle(self.srcs)
+    def get_image(self, url):
+        image_base64 = None
+        req = requests_get(url)
+        bsObjLink = BeautifulSoup(req.text, "html.parser")
+        image_link = bsObjLink.find(id="lowres")
+        if image_link is None:
+            image_link = bsObjLink.find(id="highres")
+        if image_link is None:
+            image_link = bsObjLink.find(id="image-link")
+        if image_link is not None:
+            image_url = image_link.get("href")
+            image_url = "https:" + image_url.replace("amp;", "")
+            print(f"Image Requests: {image_url}")
+            req = requests_get(image_url)
+            if 'Content-Type' in req.headers and req.headers['Content-Type'].startswith('image'):
+                image_base64 = base64.b64encode(req.content).decode()
+            if 'CDN-Status' in req.headers and req.headers['CDN-Status'] == '200':
+                image_base64 = base64.b64encode(req.content).decode()
+
+            if image_base64 is None:
+                print(req.headers)
+
+        return image_base64
+
+
+    def get_all(self):
+        images = []
+        db = Database()
+        res = db.execute(f'SELECT * FROM images')
+        data = res.fetchall()
+        for d in data:
+            images.append({'id':d[0], 'url':d[1], 'base64':d[2], 'favorite':d[3], 'updated':d[4]})
+        return images
+
+
+class ImageList():
+    def __init__(self):
+        self.index = -1
+        db = ImageDB()
+        #db.update_all()
+        self.images = db.get_all()
+        print(f"Images:{len(self.images)}")
+        #random.shuffle(self.images)
 
     def next(self):
         self.index = self.index + 1
-        if self.index >= len(self.srcs):
+        if self.index >= len(self.images):
             self.index = 0
-        link = self.srcs[self.index]
-        while link.url() is None:
-            print(f"removed {link.target_url}, items:{len(self.srcs)}")
-            self.srcs.remove(link)
-            if self.index >= len(self.srcs):
-                return None
-            link =self.srcs[self.index]
-        return link.url()
+        base64 = self.images[self.index]["base64"]
+        return base64 
 
     def prev(self):
         self.index = self.index - 1
         if self.index < 0:
-            self.index = len(self.srcs)-1
-        link = self.srcs[self.index]
-        while link.url() is None:
-            print(f"removed {link.target_url}, items:{len(self.srcs)}")
-            self.srcs.remove(link)
-            if self.index >= len(self.srcs):
-                return None
-            link =self.srcs[self.index]
-        return link.url()
+            self.index = len(self.images)-1
+        base64 = self.images[self.index]["base64"]
+        return base64
+    
+    def title(self):
+        return self.images[self.index]["url"]
 
 
     
@@ -69,7 +156,7 @@ class ImageLink():
         return self.get_url()
         
     def get_url(self):
-        req = requests.get(self.target_url, cookies=env.cookie())
+        req = requests_get(self.target_url)
         bsObjLink = BeautifulSoup(req.text, "html.parser")
         image_link = bsObjLink.find(id="lowres")
         if image_link is None:
@@ -85,21 +172,20 @@ class ImageLink():
     def isExpired(self):
         return False
 
-
-def main(page: ft.Page):
+def main(page:ft.Page):
     images = ImageList()
     def on_click_next(e):
-        image_view.src = images.next()
+        image_view.src_base64 = images.next()
         image_view.update()
         nonlocal label
-        label.value = image_view.src
+        label.text = images.title()
         label.update()
 
     def on_click_prev(e):
-        image_view.src = images.prev()
+        image_view.src_base64 = images.prev()
         image_view.update()
         nonlocal label
-        label.value = image_view.src
+        label.text = images.title()
         label.update()
 
     def on_keyboard(e: ft.KeyboardEvent):
@@ -119,14 +205,17 @@ def main(page: ft.Page):
         image_view.height = page.window.height
         image_view.update()
 
+    def on_click_web(e):
+        page.launch_url(label.text)
+
     page.on_keyboard_event = on_keyboard
-    image_view = ft.Image(src=images.next(), fit=ft.ImageFit.CONTAIN)
+    image_view = ft.Image(src_base64=images.next(), fit=ft.ImageFit.CONTAIN)
     prev_button = ft.IconButton(icon=ft.Icons.SKIP_PREVIOUS, on_click=on_click_prev)
     next_button = ft.IconButton(icon=ft.Icons.SKIP_NEXT, on_click=on_click_next)
 
     image_container = ft.Row(alignment=ft.MainAxisAlignment.CENTER)
     image_container.controls = [prev_button, image_view, next_button]
-    label = ft.Text(value=image_view.src)
+    label = ft.TextButton(text=images.title(), on_click=on_click_web)
 
     page.on_resized = on_window_resized
 
