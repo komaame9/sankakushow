@@ -117,30 +117,33 @@ class ImageDB():
             images.append({'id':d[0], 'url':d[1], 'base64':d[2], 'favorite':d[3], 'updated':d[4]})
         return images
 
+    def set_favorite(self, url, favorite):
+        db = Database()
+        db.execute(f'UPDATE images SET favorite="{favorite}" WHERE url="{url}"')
 
 class ImageList():
     def __init__(self):
-        self.index = -1
-        db = ImageDB()
-        self.images = db.get_all()
+        self.reload()
         print(f"Images:{len(self.images)}")
 
     def next(self):
         self.index = self.index + 1
         if self.index >= len(self.images):
             self.index = 0
-        base64 = self.images[self.index]["base64"]
-        return base64 
 
     def prev(self):
         self.index = self.index - 1
         if self.index < 0:
             self.index = len(self.images)-1
-        base64 = self.images[self.index]["base64"]
-        return base64
-    
+
+    def now(self):
+        return self.images[self.index]
+    def image(self):
+        return self.now()["base64"]
     def title(self):
-        return self.images[self.index]["url"]
+        return self.now()["url"]
+    def favorite(self):
+        return self.now()["favorite"]
     
     def shuffle(self):
         random.shuffle(self.images)
@@ -148,6 +151,11 @@ class ImageList():
     def update(self):
         db = ImageDB()
         db.update_all()
+        self.images = db.get_all()
+
+    def reload(self):
+        self.index = 0
+        db = ImageDB()
         self.images = db.get_all()
 
     def length(self):
@@ -158,6 +166,19 @@ class ImageList():
     
     def all(self):
         return [i["base64"] for i in self.images]
+    
+    def set_index(self, index):
+        self.index = index
+        if self.index >= len(self.images):
+            self.index = self.images-1
+        if self.index < 0:
+            self.index = 0
+        return self.index
+    
+    def set_favorite(self, favorite=0):
+        db = ImageDB()
+        db.set_favorite(self.images[self.index]["url"], favorite=favorite)
+        self.now()['favorite'] = favorite
     
 
 class ImageLink():
@@ -190,19 +211,25 @@ class ImageLink():
 
 def main(page:ft.Page):
     images = ImageList()
-    def on_click_next(e):
-        image_view.src_base64 = images.next()
+    def set_image():
+        image_view.src_base64 = images.image()
+        if images.favorite() != 0:
+            image_view.color = "#808080"
+            image_view.color_blend_mode = ft.BlendMode.COLOR
+        else:
+            image_view.color_blend_mode = ft.BlendMode.DST
         image_view.update()
         nonlocal label
         label.text = images.title()
         label.update()
 
+    def on_click_next(e):
+        images.next()
+        set_image()
+
     def on_click_prev(e):
-        image_view.src_base64 = images.prev()
-        image_view.update()
-        nonlocal label
-        label.text = images.title()
-        label.update()
+        images.prev()
+        set_image()
 
     def on_keyboard(e: ft.KeyboardEvent):
         if e.key == "Arrow Left" :
@@ -217,7 +244,10 @@ def main(page:ft.Page):
         if e.key == "U":
             def on_keyboard_update():
                 page.close(dialog)
+                modal = ft.AlertDialog(content=ft.Text("Updating..."), modal=True)
+                page.open(modal)
                 images.update()
+                page.close(modal)
             dialog = ft.AlertDialog(title=ft.Text("Update"),
                                     content=ft.Text("Do you want to update Database from Web?"),
                                     actions=[
@@ -225,15 +255,23 @@ def main(page:ft.Page):
                                         ft.TextButton("cancel", on_click=lambda e: page.close(dialog)),
                                     ],
                                     actions_alignment=ft.MainAxisAlignment.END, 
-                                    on_dismiss=lambda e: print("Modal dialog dismissed!"),
+#                                    on_dismiss=lambda e: print("Modal dialog dismissed!"),
                                    )
             page.open(dialog)
         if e.key == "S":
             images.shuffle()
-            random.shuffle(grid_view.controls)
-            grid_view.update()
+            images.set_index(0)
+            set_image()
+        if e.key == "D":
+            if images.favorite() == 0:
+                images.set_favorite(-1)
+            else:
+                images.set_favorite(0)
+            set_image()
+        if e.key == "R":
+            images.reload()
+            set_image()
             
-        #print(e.key)
 
     def on_window_resized(e):
         print("changed", e)
@@ -245,7 +283,10 @@ def main(page:ft.Page):
         page.launch_url(label.text)
 
     page.on_keyboard_event = on_keyboard
-    image_view = ft.Image(src_base64=images.next(), fit=ft.ImageFit.CONTAIN)
+    image_view = ft.Image(src_base64=images.image(), fit=ft.ImageFit.CONTAIN)
+    if images.favorite() != 0:
+        image_view.color = "#808080"
+        image_view.color_blend_mode = ft.BlendMode.COLOR
     prev_button = ft.IconButton(icon=ft.Icons.SKIP_PREVIOUS, on_click=on_click_prev)
     next_button = ft.IconButton(icon=ft.Icons.SKIP_NEXT, on_click=on_click_next)
 
