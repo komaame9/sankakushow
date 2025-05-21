@@ -46,6 +46,7 @@ class ImageDB():
         # scraping web page
         page_num=1
         item_num=1
+        created = []
         while item_num > 0:
             url = env.url(page_num)
             req = requests_get(url)
@@ -77,8 +78,10 @@ class ImageDB():
                 db.execute(f'INSERT INTO images(url, base64, favorite, updated) values("{url}", "{image_base64}", {favorite}, "{date}")')
                 #update_base64(img, db)
                 print(f'CREATE {url}')
+                created.append(url)
             else:
                 print(f"EXIST {url}")
+        print(f"Update Finished. new {len(created)} images.")
 
     def get_image(self, url):
         image_base64 = None
@@ -119,10 +122,8 @@ class ImageList():
     def __init__(self):
         self.index = -1
         db = ImageDB()
-        #db.update_all()
         self.images = db.get_all()
         print(f"Images:{len(self.images)}")
-        #random.shuffle(self.images)
 
     def next(self):
         self.index = self.index + 1
@@ -140,8 +141,23 @@ class ImageList():
     
     def title(self):
         return self.images[self.index]["url"]
+    
+    def shuffle(self):
+        random.shuffle(self.images)
+    
+    def update(self):
+        db = ImageDB()
+        db.update_all()
+        self.images = db.get_all()
 
+    def length(self):
+        return len(self.images)
 
+    def index(self):
+        return self.index
+    
+    def all(self):
+        return [i["base64"] for i in self.images]
     
 
 class ImageLink():
@@ -194,9 +210,29 @@ def main(page:ft.Page):
         if e.key == "Arrow Right" :
             on_click_next(e)
         if e.key == "Escape":
+            image_view.visible = False
             page.window.visible=False
             page.update()
             page.window.destroy()
+        if e.key == "U":
+            def on_keyboard_update():
+                page.close(dialog)
+                images.update()
+            dialog = ft.AlertDialog(title=ft.Text("Update"),
+                                    content=ft.Text("Do you want to update Database from Web?"),
+                                    actions=[
+                                        ft.TextButton("Update", on_click=lambda e: on_keyboard_update()),
+                                        ft.TextButton("cancel", on_click=lambda e: page.close(dialog)),
+                                    ],
+                                    actions_alignment=ft.MainAxisAlignment.END, 
+                                    on_dismiss=lambda e: print("Modal dialog dismissed!"),
+                                   )
+            page.open(dialog)
+        if e.key == "S":
+            images.shuffle()
+            random.shuffle(grid_view.controls)
+            grid_view.update()
+            
         #print(e.key)
 
     def on_window_resized(e):
@@ -219,10 +255,9 @@ def main(page:ft.Page):
 
     page.on_resized = on_window_resized
 
-
     page.add(
         label,
-        image_container
+        image_container,
     )
     page.window.height = 1500
     page.window.width = 1500
