@@ -121,29 +121,40 @@ class ImageDB():
         db = Database()
         db.execute(f'UPDATE images SET favorite="{favorite}" WHERE url="{url}"')
 
+class ImageDic():
+    def __init__(self, dic):
+        self.dic = dic
+    def base64(self):
+        return self.dic['base64']
+    def url(self):
+        return self.dic['url']
+    def favorite(self):
+        return self.dic['favorite']
+    def date(self):
+        return self.dic['date']
+    def set_favorite(self, favorite=0):
+        self.dic['favorite'] = favorite
+
+
 class ImageList():
     def __init__(self):
         self.reload()
         print(f"Images:{len(self.images)}")
 
-    def next(self):
+    def next(self) -> ImageDic:
         self.index = self.index + 1
         if self.index >= len(self.images):
             self.index = 0
+        return self.now()
 
-    def prev(self):
+    def prev(self) -> ImageDic:
         self.index = self.index - 1
         if self.index < 0:
             self.index = len(self.images)-1
+        return self.now()
 
-    def now(self):
+    def now(self) -> ImageDic :
         return self.images[self.index]
-    def image(self):
-        return self.now()["base64"]
-    def title(self):
-        return self.now()["url"]
-    def favorite(self):
-        return self.now()["favorite"]
     
     def shuffle(self):
         random.shuffle(self.images)
@@ -151,23 +162,23 @@ class ImageList():
     def update(self):
         db = ImageDB()
         db.update_all()
-        self.images = db.get_all()
+        self.images = [ImageDic(i) for i in db.get_all()]
 
     def reload(self):
         self.index = 0
         db = ImageDB()
-        self.images = db.get_all()
+        self.images = [ImageDic(i) for i in db.get_all()]
 
-    def length(self):
+    def length(self) -> int:
         return len(self.images)
 
-    def index(self):
+    def index(self) -> int:
         return self.index
     
     def all(self):
-        return [i["base64"] for i in self.images]
+        return [i.base64() for i in self.images]
     
-    def set_index(self, index):
+    def set_index(self, index) -> int:
         self.index = index
         if self.index >= len(self.images):
             self.index = self.images-1
@@ -175,10 +186,15 @@ class ImageList():
             self.index = 0
         return self.index
     
-    def set_favorite(self, favorite=0):
+    def set_favorite(self, image:ImageDic, favorite=0):
         db = ImageDB()
-        db.set_favorite(self.images[self.index]["url"], favorite=favorite)
-        self.now()['favorite'] = favorite
+        db.set_favorite(image.url(), favorite=favorite)
+        self.now().set_favorite(favorite)
+
+    def select_list(self, favorite=0):
+        self.index = 0
+        self.reload()
+        self.images = [i for i in self.images if i.favorite()==favorite]
     
 
 class ImageLink():
@@ -210,17 +226,20 @@ class ImageLink():
         return False
 
 def main(page:ft.Page):
+    selected_favorite = 0
     images = ImageList()
+    images.select_list(selected_favorite)
+    images.shuffle()
     def set_image():
-        image_view.src_base64 = images.image()
-        if images.favorite() != 0:
+        image_view.src_base64 = images.now().base64()
+        if images.now().favorite() != 0:
             image_view.color = "#808080"
             image_view.color_blend_mode = ft.BlendMode.COLOR
         else:
             image_view.color_blend_mode = ft.BlendMode.DST
         image_view.update()
         nonlocal label
-        label.text = images.title()
+        label.text = images.now().url()
         label.update()
 
     def on_click_next(e):
@@ -263,14 +282,24 @@ def main(page:ft.Page):
             images.set_index(0)
             set_image()
         if e.key == "D":
-            if images.favorite() == 0:
-                images.set_favorite(-1)
+            if images.now().favorite() == 0:
+                images.set_favorite(images.now(), -1)
             else:
-                images.set_favorite(0)
+                images.set_favorite(images.now(), 0)
             set_image()
         if e.key == "R":
             images.reload()
             set_image()
+        if e.key == "F":
+            nonlocal selected_favorite
+            if selected_favorite == 0:
+                images.select_list(-1)
+                selected_favorite = -1
+            else:
+                images.select_list(0)
+                selected_favorite = -0
+            set_image()
+
             
 
     def on_window_resized(e):
@@ -283,8 +312,8 @@ def main(page:ft.Page):
         page.launch_url(label.text)
 
     page.on_keyboard_event = on_keyboard
-    image_view = ft.Image(src_base64=images.image(), fit=ft.ImageFit.CONTAIN)
-    if images.favorite() != 0:
+    image_view = ft.Image(src_base64=images.now().base64(), fit=ft.ImageFit.CONTAIN)
+    if images.now().favorite() != 0:
         image_view.color = "#808080"
         image_view.color_blend_mode = ft.BlendMode.COLOR
     prev_button = ft.IconButton(icon=ft.Icons.SKIP_PREVIOUS, on_click=on_click_prev)
@@ -292,7 +321,7 @@ def main(page:ft.Page):
 
     image_container = ft.Row(alignment=ft.MainAxisAlignment.CENTER)
     image_container.controls = [prev_button, image_view, next_button]
-    label = ft.TextButton(text=images.title(), on_click=on_click_web)
+    label = ft.TextButton(text=images.now().url(), on_click=on_click_web)
 
     page.on_resized = on_window_resized
 
@@ -302,6 +331,8 @@ def main(page:ft.Page):
     )
     page.window.height = 1500
     page.window.width = 1500
+    page.window.top =300
+    page.window.left = 1000
     page.update()
 
 
