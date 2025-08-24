@@ -33,7 +33,7 @@ class ImageDB():
     def __init__(self):
         if not os.path.isfile(DATABASE_NAME):
             self.init()
-            self.update_all()
+            self.check_and_update()
 
     def init(self):
         db = Database()
@@ -41,10 +41,9 @@ class ImageDB():
             "CREATE TABLE images(id INTEGER PRIMARY KEY AUTOINCREMENT, url STRING, base64 STRING, favorite INTEGER, updated DATE)"
         )
 
-    def update_all(self):
+    def check_and_update(self, page_num=1):
         image_urls = []
         # scraping web page
-        page_num=1
         item_num=1
         created = []
         while item_num > 0:
@@ -121,6 +120,26 @@ class ImageDB():
         db = Database()
         db.execute(f'UPDATE images SET favorite="{favorite}" WHERE url="{url}"')
 
+    def get_and_save_local_image(self, path):
+        def image_file_to_base64(file_path):
+            with open(file_path, "rb") as image_file:
+                data = base64.b64encode(image_file.read())
+
+            return data.decode('utf-8')
+        date = datetime.datetime.now()
+        url = "local://" + str(date)
+        image_base64 = image_file_to_base64(path)
+        db = Database()
+
+        res = db.execute(f'SELECT id FROM images WHERE base64="{image_base64}"')
+        if res.fetchone() is None:
+            print(f"CREATE:New local file found {path}")
+            favorite = 0
+            db.execute(f'INSERT INTO images(url, base64, favorite, updated) values("{url}", "{image_base64}", {favorite}, "{date}")')
+        else:
+            print(f"SKIP:Already Saved local file {path}")
+        
+
 class ImageDic():
     def __init__(self, dic):
         self.dic = dic
@@ -159,9 +178,9 @@ class ImageList():
     def shuffle(self):
         random.shuffle(self.images)
     
-    def update(self):
+    def update(self, page_num=1):
         db = ImageDB()
-        db.update_all()
+        db.check_and_update(page_num=page_num)
         self.images = [ImageDic(i) for i in db.get_all()]
 
     def reload(self):
@@ -225,9 +244,26 @@ class ImageLink():
     def isExpired(self):
         return False
 
+def check_local_images():
+    def get_local_files():
+        files = ["images/"+file for file in os.listdir("images")]
+        files = [file for file in files if os.path.splitext(file)[1] in ('.jpg', '.png', '.gif', '.jpeg')]
+        print(files)
+        return files
+
+    print("check local files")
+    db = ImageDB()
+    for local_file in get_local_files():
+        db.get_and_save_local_image(local_file)
+
+
 def main(page:ft.Page):
+    check_local_images()
+
     selected_favorite = 0
     images = ImageList()
+    if (os.environ.get("SANKAKU_UPDATE")):
+        images.update(page_num=20)
     images.select_list(selected_favorite)
     images.shuffle()
     def set_image():
@@ -312,7 +348,7 @@ def main(page:ft.Page):
         page.launch_url(label.text)
 
     page.on_keyboard_event = on_keyboard
-    image_view = ft.Image(src_base64=images.now().base64(), fit=ft.ImageFit.CONTAIN)
+    image_view = ft.Image(src_base64=images.now().base64(), fit=ft.ImageFit.CONTAIN, filter_quality=ft.FilterQuality.HIGH)
     if images.now().favorite() != 0:
         image_view.color = "#808080"
         image_view.color_blend_mode = ft.BlendMode.COLOR
