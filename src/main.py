@@ -41,12 +41,14 @@ class ImageDB():
             "CREATE TABLE images(id INTEGER PRIMARY KEY AUTOINCREMENT, url STRING, base64 STRING, favorite INTEGER, updated DATE)"
         )
 
-    def check_and_update(self, page_num=1):
-        image_urls = []
+    def check_and_update(self, only_newest=False):
         # scraping web page
+        page_num = 1
         item_num=1
         created = []
+        db = Database()
         while item_num > 0:
+            image_urls = []
             url = env.url(page_num)
             req = requests_get(url)
             bsObj = BeautifulSoup(req.text, "html.parser")
@@ -60,26 +62,28 @@ class ImageDB():
                     item_num = item_num + 1
             print(f"get page{page_num} items:{item_num}")
             page_num = page_num+1
-        # update db
-        db = Database()
-        for url in image_urls:
-            db.execute("")
-            res = db.execute(f'SELECT id FROM images WHERE url="{url}"')
-            if res.fetchone() is None:
-                favorite = 0
-                date = datetime.datetime.now()
-                # get image
-                image_base64 = self.get_image(url)
-                if image_base64 is None:
-                    print(f"  Image:{url} can not get.")
-                    continue
-                # insert DB
-                db.execute(f'INSERT INTO images(url, base64, favorite, updated) values("{url}", "{image_base64}", {favorite}, "{date}")')
-                #update_base64(img, db)
-                print(f'CREATE {url}')
-                created.append(url)
-            else:
-                print(f"EXIST {url}")
+            # update db
+            created_num=len(created)
+            for url in image_urls:
+                db.execute("")
+                res = db.execute(f'SELECT id FROM images WHERE url="{url}"')
+                if res.fetchone() is None:
+                    favorite = 0
+                    date = datetime.datetime.now()
+                    # get image
+                    image_base64 = self.get_image(url)
+                    if image_base64 is None:
+                        print(f"  Image:{url} can not get.")
+                        continue
+                    # insert DB
+                    db.execute(f'INSERT INTO images(url, base64, favorite, updated) values("{url}", "{image_base64}", {favorite}, "{date}")')
+                    #update_base64(img, db)
+                    print(f'CREATE {url}')
+                    created.append(url)
+                else:
+                    print(f"EXIST {url}")
+            if only_newest and created_num == len(created):
+                break
         print(f"Update Finished. new {len(created)} images.")
 
     def get_image(self, url):
@@ -178,9 +182,9 @@ class ImageList():
     def shuffle(self):
         random.shuffle(self.images)
     
-    def update(self, page_num=1):
+    def update(self, only_newest=False):
         db = ImageDB()
-        db.check_and_update(page_num=page_num)
+        db.check_and_update(only_newest=only_newest)
         self.images = [ImageDic(i) for i in db.get_all()]
 
     def reload(self):
@@ -248,7 +252,7 @@ def check_local_images():
     def get_local_files():
         files = ["images/"+file for file in os.listdir("images")]
         files = [file for file in files if os.path.splitext(file)[1] in ('.jpg', '.png', '.gif', '.jpeg')]
-        print(files)
+        print(f"local file list:{files}")
         return files
 
     print("check local files")
@@ -263,7 +267,7 @@ def main(page:ft.Page):
     selected_favorite = 0
     images = ImageList()
     if (os.environ.get("SANKAKU_UPDATE")):
-        images.update(page_num=20)
+        images.update(only_newest=True)
     images.select_list(selected_favorite)
     images.shuffle()
     def set_image():
