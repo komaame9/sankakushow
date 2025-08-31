@@ -71,7 +71,7 @@ class ImageDB():
                     favorite = 0
                     date = datetime.datetime.now()
                     # get image
-                    image_base64 = self.get_image(url)
+                    image_base64 = self.get_sankaku_image(url)
                     if image_base64 is None:
                         print(f"  Image:{url} can not get.")
                         continue
@@ -86,7 +86,7 @@ class ImageDB():
                 break
         print(f"Update Finished. new {len(created)} images.")
 
-    def get_image(self, url):
+    def get_sankaku_image(self, url):
         image_base64 = None
         req = requests_get(url)
         bsObjLink = BeautifulSoup(req.text, "html.parser")
@@ -107,6 +107,34 @@ class ImageDB():
 
             if image_base64 is None:
                 print(req.headers)
+
+        return image_base64
+
+    def get_and_save_image(self, image_url):
+        image_base64 = None
+        print(f"Image Requests: {image_url}")
+        req = requests_get(image_url)
+        if 'Content-Type' in req.headers and req.headers['Content-Type'].startswith('image'):
+            image_base64 = base64.b64encode(req.content).decode()
+        if 'CDN-Status' in req.headers and req.headers['CDN-Status'] == '200':
+            image_base64 = base64.b64encode(req.content).decode()
+        if image_base64 is None:
+            print(req.headers)
+
+        if image_base64 is None:
+            print(f"  Image:{image_url} can not get.")
+            return None
+        # insert DB
+        db = Database()
+        favorite = 0
+        date = datetime.datetime.now()
+        res = db.execute(f'SELECT id FROM images WHERE base64="{image_base64}"')
+        if res.fetchone() is None:
+            print(f"CREATE:{image_url}")
+            favorite = 0
+            db.execute(f'INSERT INTO images(url, base64, favorite, updated) values("{image_url}", "{image_base64}", {favorite}, "{date}")')
+        else:
+            print(f"SKIP:Already Saved {image_url}")
 
         return image_base64
 
@@ -261,13 +289,12 @@ def check_local_images():
         db.get_and_save_local_image(local_file)
 
 
-def main(page:ft.Page):
+def app_main(page:ft.Page):
     check_local_images()
 
     selected_favorite = 0
     images = ImageList()
-    if (os.environ.get("SANKAKU_UPDATE")):
-        images.update(only_newest=True)
+    images.update(only_newest=True)
     images.select_list(selected_favorite)
     images.shuffle()
     def set_image():
@@ -375,5 +402,51 @@ def main(page:ft.Page):
     page.window.left = 1000
     page.update()
 
+
+def main(page:ft.Page):
+    if (os.environ.get("IMAGE_SAVE_MODE")):
+        blank_image="R0lGODlhAQABAGAAACH5BAEKAP8ALAAAAAABAAEAAAgEAP8FBAA7"
+        def on_keyboard(e: ft.KeyboardEvent):
+            if e.key == "Escape":
+                image.visible = False
+                page.window.visible=False
+                page.update()
+                page.window.destroy()
+            if e.key == "C":
+                image.src_base64=blank_image
+                image.update()
+
+        page.on_keyboard_event = on_keyboard
+        def on_submit(e):
+            url_field.read_only=True
+            url_field.update()
+            message.visible=True
+            message.update()
+            db = ImageDB()
+            ret = db.get_and_save_image(url_field.value)
+            if ret:
+                image.src_base64 = ret
+                image.update()
+            url_field.read_only=False
+            url_field.value=""
+            url_field.update()
+            message.visible=False
+            message.update()
+        def on_focus(e:ft.WindowEvent):
+            if e.type is ft.WindowEventType.FOCUS:
+                url_field.focus()
+                url_field.update()
+
+        url_field = ft.TextField(label="image url", on_submit=on_submit)
+        image = ft.Image(src_base64=blank_image, fit=ft.ImageFit.CONTAIN, filter_quality=ft.FilterQuality.HIGH, width=640, height=640)
+        message = ft.Text(value="Loading", visible=False)
+        row = ft.Row(controls=[image])
+        page.add(url_field, message, row)
+        page.window.width = 640
+        page.window.height = 700
+        page.window.on_event = on_focus
+        page.update()
+    else:
+        app_main(page)
 
 ft.app(main)
