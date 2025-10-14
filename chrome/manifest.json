@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Image URL GET Sender",
+  "version": "1.0",
+  "description": "右クリックした画像のURLを取得し、指定されたREST APIにGETリクエストを送信します。",
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "permissions": [
+    "contextMenus",  
+    "notifications" 
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ]
+}
