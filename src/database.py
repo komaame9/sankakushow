@@ -139,11 +139,18 @@ class ImageDB():
     def get_all(self):
         images = []
         db = Database()
-        res = db.execute(f'SELECT * FROM images')
+        res = db.execute(f'SELECT id,url,favorite,updated FROM images')
         data = res.fetchall()
         for d in data:
-            images.append({'id':d[0], 'url':d[1], 'base64':d[2], 'favorite':d[3], 'updated':d[4]})
+            images.append({'id':d[0], 'url':d[1], 'base64':None, 'favorite':d[2], 'updated':d[3]})
         return images
+    
+
+    def get_base64(self, id):
+        db = Database()
+        res = db.execute(f'SELECT base64 FROM images WHERE id="{id}"')
+        data = res.fetchone()
+        return data[0]
 
     def set_favorite(self, url, favorite):
         db = Database()

@@ -8,7 +8,9 @@ class ImageDic():
     def __init__(self, dic):
         self.dic = dic
     def base64(self):
-        return self.dic['base64']
+        db = database.ImageDB()
+        return db.get_base64(self.dic['id'])
+        #return self.dic['base64']
     def url(self):
         return self.dic['url']
     def favorite(self):
@@ -98,7 +100,6 @@ def app_main(page:ft.Page):
 
     selected_favorite = 0
     images = ImageList()
-    images.update(only_newest=True)
     images.select_list(selected_favorite)
     images.shuffle()
     def set_image():
@@ -136,7 +137,7 @@ def app_main(page:ft.Page):
                 page.close(dialog)
                 modal = ft.AlertDialog(content=ft.Text("Updating..."), modal=True)
                 page.open(modal)
-                images.update()
+                images.update(only_newest=True)
                 page.close(modal)
             dialog = ft.AlertDialog(title=ft.Text("Update"),
                                     content=ft.Text("Do you want to update Database from Web?"),
@@ -200,8 +201,8 @@ def app_main(page:ft.Page):
         label,
         image_container,
     )
-    page.window.height = 1500
-    page.window.width = 1500
+    page.window.height = 1800
+    page.window.width = 2200
     page.window.top =300
     page.window.left = 1000
     page.update()
